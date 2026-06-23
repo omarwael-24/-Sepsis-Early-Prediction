@@ -1,21 +1,29 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
-
-# Virtual Environment
+# ==========================================
+# Environments & Credentials (حماية البيئة والمتغيرات السرية)
+# ==========================================
 venv/
 .venv/
 env/
+ENV/
+.env
+*.env
 
-# Data and Large Files (حماية من رفع الـ datasets الكبيرة)
-# لو ملفات البيانات مساحتها كبيرة، يفضل متترفعش على GitHub
-data/*.csv
-data/*.xlsx
-data/*.parquet
+# ==========================================
+# Data & Large Files (حماية من رفع الـ Datasets الكبيرة)
+# ==========================================
+# تجاهل أي ملف csv أو excel في أي مكان جوه مشروعك
+**/*.csv
+**/*.xlsx
+**/*.parquet
+**/*.zip
 
-# Jupyter Notebook checkpoints
+# تجاهل فولدر الـ raw باللي جواه تماماً
+data/raw/
+
+# ==========================================
+# Python Cache & Jupyter Checkpoints
+# ==========================================
+__pycache__/
+*.py[cod]
 .ipynb_checkpoints/
-
-# OS generated files
 .DS_Store
