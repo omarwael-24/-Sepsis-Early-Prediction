@@ -1,0 +1,21 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# Data and Large Files (حماية من رفع الـ datasets الكبيرة)
+# لو ملفات البيانات مساحتها كبيرة، يفضل متترفعش على GitHub
+data/*.csv
+data/*.xlsx
+data/*.parquet
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# OS generated files
+.DS_Store
