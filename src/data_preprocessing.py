@@ -45,15 +45,21 @@ class SepsisDataProcessor:
         pass
 
     @staticmethod
+    def Transform_Hour_Column() -> pd.DataFrame:
+        df = DropUnwantedColumns.drop_unwanted_columns()
+        df['True_Hour'] = df['Hour'] % 24
+        df['Hour_sin'] = np.sin(2 * np.pi * df['True_Hour'] / 24)
+        df['Hour_cos'] = np.cos(2 * np.pi * df['True_Hour'] / 24)
+        return df
+    
+    @staticmethod
     def SetMultIndexGroup():
     
-        df=DataLoader.load_clean()
+        df=SepsisDataProcessor.Transform_Hour_Column()
 
         # 3. making a Spesis_onset column  
         df['Spesis_onset']=df.groupby('Patient_ID')['SepsisLabel'].diff()
         
         # 4. Set "Patiend_ID" , "ICULOS" as index [Multi_Index]
         df = df.set_index(['Patient_ID','ICULOS'])
-    
-
         return df
