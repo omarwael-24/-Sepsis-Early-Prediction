@@ -22,7 +22,6 @@ class DropUnwantedColumns:
         unwanted_columns = ['Unit1', 'Unit2', 'HospAdmTime', 'Unnamed: 0']
         df = df.drop(columns=unwanted_columns, errors='ignore')
         return df
-
 class SepsisDataProcessor:
 
     def __init__(self):
