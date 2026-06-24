@@ -39,11 +39,21 @@ class DropUnwantedColumns:
         # Return the modified dataframe (Crucial step that was missing)
         return df
 
+class SepsisDataProcessor:
 
-#     # 3. Set "Patiend_ID" , "ICULOS" as index [Multi_Index]
-#     df = df.set_index(['Patient_ID','ICULOS'])
+    def __init__(self):
+        pass
+
+    @staticmethod
+    def SetMultIndexGroup():
     
-#     # 4. making a Spesis_onset column  
-#     df['Spesis_onset']=df.groupby('Patient_ID')['SepsisLabel'].diff()
+        df=DataLoader.load_clean()
 
-#     return df
+        # 3. making a Spesis_onset column  
+        df['Spesis_onset']=df.groupby('Patient_ID')['SepsisLabel'].diff()
+        
+        # 4. Set "Patiend_ID" , "ICULOS" as index [Multi_Index]
+        df = df.set_index(['Patient_ID','ICULOS'])
+    
+
+        return df
