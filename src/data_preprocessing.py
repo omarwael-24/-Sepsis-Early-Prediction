@@ -43,7 +43,7 @@ class SepsisDataProcessor:
         for col in features_to_impute:
             df[f'{col}_is_missing'] = df[col].isna().astype(int)
 
-        df[features_to_impute] = df.groupby(level='Patiend_ID')[features_to_impute].ffill().bfill()
+        df[features_to_impute] = df.groupby(level='Patient_ID')[features_to_impute].ffill().bfill()
 
         return df
     
