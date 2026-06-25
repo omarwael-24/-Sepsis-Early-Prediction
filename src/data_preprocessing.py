@@ -20,7 +20,7 @@ class DropUnwantedColumns:
     @staticmethod
     def drop_unwanted_columns(df: pd.DataFrame) -> pd.DataFrame:
         unwanted_columns = ['Unit1', 'Unit2', 'HospAdmTime', 'Unnamed: 0'
-                            ,'Hour' ,'True_Hour']
+                            , 'Hour', 'True_Hour']
         df = df.drop(columns=unwanted_columns, errors='ignore')
         return df
     
