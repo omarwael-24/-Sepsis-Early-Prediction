@@ -1,109 +1,69 @@
-""" ==================== MODEL TRAINING & HYPERPARAMETER TUNING ==================== """
 import pandas as pd
-
-import lightgbm as lgb
 import numpy as np
-
+from lightgbm import LGBMClassifier
 from sklearn.model_selection import StratifiedGroupKFold
 
 class GroupDataSplitter:
+    def __init__(self, n_splits=5, shuffle=True, random_state=42):
+        self.sgkf = StratifiedGroupKFold(n_splits=n_splits, shuffle=shuffle, random_state=random_state)
 
-    def __init__(self, n_split:int =5 ,shuffel:bool=True , randome_state : int =42 ):
-        self.n_split=n_split
-        self.shuffel=shuffel
-        self.randome_state = randome_state
-
-        self.sgkf=StratifiedGroupKFold(n_split=self.n_split, randome_state=self.randome_state ,shuffel=self.shuffel)
+    def split_data(self, df: pd.DataFrame):
+        df = df.dropna(subset=['SepsisLabel'])
         
-    
-    def splitdata(self,df :pd.DataFrame):
-
-        x= df.drop(columns=['SepsisLabel'])
-        y=df['SepsisLabel']
-
+        y = df['SepsisLabel'].astype(int)
+        X = df.drop(columns=['SepsisLabel'])
+        
         groups = df.index.get_level_values('Patient_ID')
-
+        
         patient_labels = y.groupby(groups).max()
+        y_stratify = groups.map(patient_labels).fillna(0).astype(int)
         
-        y_stratify = groups.map(patient_labels)
-
-        folds=[]
-
-        for train_idx , test_idx in self.sgkf(x,y_stratify,groups=groups):
+        folds = []
+        for train_idx, test_idx in self.sgkf.split(X, y_stratify, groups=groups):
             folds.append((train_idx, test_idx))
-        
-        return x, y, folds
+            
+        return X, y, folds
 
-class SepsisModel:
 
-    def __init__(self, scale_weight:float = 49.0):
-        
-        self.scale_weight=scale_weight
-
-        self.params = {
-            'objective': 'binary',
-            'metric': 'binary_logloss',
-            'boosting_type': 'gbdt',
-            'scale_pos_weight': self.scale_weight,
-            'learning_rate': 0.03,
-            'num_leaves': 31,
-            'max_depth': 6,
-            'feature_fraction': 0.8,
-            'bagging_fraction': 0.8,
-            'bagging_freq': 5,
-            'verbose': -1,
-            'random_state': 42
-        }
-        self.model = None
-
-    def fit(self, X_train: pd.DataFrame, y_train: pd.Series, X_val: pd.DataFrame, y_val: pd.Series):
-        train_data = lgb.Dataset(X_train, label=y_train)
-        val_data = lgb.Dataset(X_val, label=y_val, reference=train_data)
-        
-        self.model = lgb.train(
-            params=self.params,
-            train_set=train_data,
-            num_boost_round=1000,
-            valid_sets=[train_data, val_data],
-            callbacks=[
-                lgb.early_stopping(stopping_rounds=50, verbose=False),
-                lgb.log_evaluation(period=0)
-            ]
-        )
-        return self
-    
-    def predict_proba(self,x:pd.DataFrame) -> np.ndarray:
-        
-        if self.model == None:
-            raise ValueError("Model not trained yet.")
-        else:
-            return self.model.predict(x,num_iteration=self.model.best_iteration)
-        
-class Model_trainer:
-
-    def __init__(self):
-        self.speliter=GroupDataSplitter()
-
-        self.trained_models=[]
+class ModelTrainer:
+    def __init__(self, n_splits=5, random_state=42):
+        self.splitter = GroupDataSplitter(n_splits=n_splits, random_state=random_state)
+        self.random_state = random_state
+        self.n_splits = n_splits
 
     def run_cross_validation(self, df: pd.DataFrame):
-
-        x , y, fold =self.speliter.splitdata(df)
-
-        for fold_idx , (train_idx , val_idx) in enumerate(fold):
+        X, y, folds = self.splitter.split_data(df)
+        trained_models = []
+        
+        balanced_weight = 10.0
+        print(f"[Trainer Info] Using Controlled Scale Pos Weight: {balanced_weight}")
+        
+        for fold_idx, (train_idx, val_idx) in enumerate(folds):
+            print(f"--- Training Fold {fold_idx + 1}/{self.n_splits} ---")
             
-            print(f"Training Fold {fold_idx + 1}/{len(fold)}...")
-
-            x_train , y_train = x.iloc(train_idx) , y.iloc(train_idx)
-
-            x_val , y_val = x.iloc(val_idx) , y.iloc(val_idx)
-
-            calculated_weight = (y_train == 0).sum() / (y_train == 1).sum()
-
-            sepsis_model = SepsisModel(scale_pos_weight=calculated_weight)
-
-            sepsis_model.fit(x_train, y_train, x_val, y_val)
+            X_train, y_train = X.iloc[train_idx], y.iloc[train_idx]
+            X_val, y_val = X.iloc[val_idx], y.iloc[val_idx]
             
-            self.trained_models.append(sepsis_model)
+            model = LGBMClassifier(
+                n_estimators=150,       
+                learning_rate=0.05,      
+                max_depth=4,             
+                num_leaves=15,          
+                min_child_samples=50,    
+                scale_pos_weight=balanced_weight, 
+                subsample=0.8,
+                colsample_bytree=0.8,
+                random_state=self.random_state,
+                n_jobs=-1,
+                verbose=-1
+            )
             
-        return x, y, fold, self.trained_models
+            model.fit(
+                X_train, y_train,
+                eval_set=[(X_val, y_val)],
+                callbacks=[]
+            )
+            
+            trained_models.append(model)
+            
+        return X, y, folds, trained_models
