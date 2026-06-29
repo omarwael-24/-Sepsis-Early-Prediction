@@ -73,4 +73,4 @@ if __name__ == "__main__":
     
     print(f"Sepsis Probability: {prob[0]*100:.2f}%")
     print(f"Threshold: {predictor.best_threshold * 100:.2f}%")
-    print(f"Alarm: {'🚨 ALERT' if alarm[0] == 1 else '✅ Stable'}")
+    print(f"Alarm: {'ALERT' if alarm[0] == 1 else 'Stable'}")
