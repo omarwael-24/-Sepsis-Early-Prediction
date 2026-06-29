@@ -3,6 +3,11 @@ import sys
 import joblib
 import pandas as pd
 import numpy as np
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+from src.data_preprocessing import DataLoader, SepsisDataProcessor, DropUnwantedColumns
+from src.feature_engineering import HourFeature, ExtractingRollingFeatures
 
 class SepsisPredictor:
     def __init__(self, models_dir="models"):
@@ -13,57 +18,59 @@ class SepsisPredictor:
         self._load_pipeline()
 
     def _load_pipeline(self):
-        # 1. Load Clinical Metadata
         metadata_path = os.path.join(self.models_dir, "pipeline_metadata.pkl")
-        if not os.path.exists(metadata_path):
-            raise FileNotFoundError(f"Metadata not found at {metadata_path}. Please run training first.")
-        
         metadata = joblib.load(metadata_path)
         self.best_threshold = metadata["best_threshold"]
         self.feature_names = metadata["feature_names"]
-
-        # 2. Load the 5 Trained Fold Models
         for i in range(1, 6):
-            model_path = os.path.join(self.models_dir, f"lgbm_fold_{i}.pkl")
-            if os.path.exists(model_path):
-                self.models.append(joblib.load(model_path))
-            else:
-                print(f"[Warning] Missing model for fold {i}")
-                
-        print(f"[Inference Pipeline] Loaded {len(self.models)} models. Optimal Threshold: {self.best_threshold:.4f}")
+            self.models.append(joblib.load(os.path.join(self.models_dir, f"lgbm_fold_{i}.pkl")))
 
-    def predict_probability(self, X_input: pd.DataFrame) -> float:
-        # Align features to ensure exactly the same columns as training
+    def predict_action(self, X_input: pd.DataFrame):
         X_aligned = X_input[self.feature_names]
-        
-        # Collect predictions from all loaded fold models
-        fold_probs = []
-        for model in self.models:
-            # Predict probability for class 1 (Sepsis)
-            prob = model.predict_proba(X_aligned)[:, 1]
-            fold_probs.append(prob)
-            
-        # Compute the ensemble average probability
-        avg_prob = np.mean(fold_probs, axis=0)
-        return avg_prob
+        fold_probs = [model.predict_proba(X_aligned)[:, 1] for model in self.models]
+        prob = np.mean(fold_probs, axis=0)
+        return prob, (prob >= self.best_threshold).astype(int)
 
-    def predict_action(self, X_input: pd.DataFrame) -> dict:
-        # Get ensemble probability
-        probabilities = self.predict_probability(X_input)
-        
-        # Trigger alarm if probability >= optimal clinical threshold
-        predictions = (probabilities >= self.best_threshold).astype(int)
-        
-        return {
-            "sepsis_probability": probabilities,
-            "trigger_alarm": predictions
-        }
-
-# --- تجربة سريعة للتأكد من أن كل شيء يعمل بسلاسة ---
 if __name__ == "__main__":
-    print("Testing Sepsis Predictor Pipeline...")
-    try:
-        predictor = SepsisPredictor()
-        print("Pipeline works perfectly and is ready to process new patients!")
-    except Exception as e:
-        print(f"Error initializing predictor: {e}")
+    print("--- Live Patient Inference Test ---")
+    raw_df = DataLoader.load_clean()
+    
+    if isinstance(raw_df.index, pd.MultiIndex):
+        raw_df = raw_df.reset_index()
+    elif raw_df.index.name is not None:
+        raw_df = raw_df.reset_index()
+
+    # اختيار مريض مصاب بالسيبسس
+    sepsis_df = raw_df[raw_df['SepsisLabel'] == 1]
+    sample_id = sepsis_df['Patient_ID'].iloc[0]
+    
+    patient_data = raw_df[raw_df['Patient_ID'] == sample_id].copy()
+    print(f"Patient ID: {sample_id} ({len(patient_data)} hours)")
+
+    # تشغيل الـ Pipeline
+    df = HourFeature.transform_hour_column(patient_data)
+    df = SepsisDataProcessor.SetMultIndexGroup(df)
+    df = SepsisDataProcessor.impute_missing_values(df)
+    df = ExtractingRollingFeatures.extracting_rolling_features(df)
+    df = DropUnwantedColumns.drop_unwanted_columns(df)
+    
+    # فلترة الساعات اللي فيها الخطر حقيقي (لما يكون Spesis_onset بيساوي 1)
+    danger_hours = df[df['Spesis_onset'] == 1]
+    
+    # لو ملهاش onset واضح هناخد آخر ساعة، لو ليها هناخد ساعة الخطر
+    if not danger_hours.empty:
+        target_hour = danger_hours.tail(1)
+        print("🎯 Testing exactly at the onset of Sepsis symptoms!")
+    else:
+        target_hour = df.tail(1)
+
+    if 'SepsisLabel' in target_hour.columns: 
+        target_hour = target_hour.drop(columns=['SepsisLabel'])
+
+    # التوقع
+    predictor = SepsisPredictor()
+    prob, alarm = predictor.predict_action(target_hour)
+    
+    print(f"Sepsis Probability: {prob[0]*100:.2f}%")
+    print(f"Threshold: {predictor.best_threshold * 100:.2f}%")
+    print(f"Alarm: {'🚨 ALERT' if alarm[0] == 1 else '✅ Stable'}")
